@@ -14,13 +14,14 @@ const int FIELD_PROCESS_RANK = 3;
 const int FIELD_SIZES[2] = {128 , 64};
 const int MAX_RUN = 10;
 const int NUM_ROUNDS = 900;
-const int BUFFER_SIZE = 8;
+const int BUFFER_SIZE = 9;
 
 
 struct PlayerInfo {
 	int prev_position[2];
 	int current_position[2];
 	int reached_ball_this_round;
+	int win_ball_this_round;
 	int num_meters_run;
 	int num_times_reached_ball;
 	int num_times_won_ball;
@@ -37,6 +38,14 @@ int min(int x, int y) {
 }
 
 
+int max(int x, int y) {
+	if (x > y) {
+		return x;
+	} else {
+		return y;
+	}
+}
+
 int absolute(int x) {
 	if (x < 0) {
 		return -x;
@@ -47,8 +56,8 @@ int absolute(int x) {
 
 //helper functions
 void print_player_info(struct PlayerInfo * player_info) {
-	printf("%d %d %d %d %d %d %d %d\n", player_info->prev_position[0], player_info->prev_position[1], player_info->current_position[0], player_info->current_position[1], 
-		player_info->reached_ball_this_round, player_info->num_meters_run, player_info->num_times_reached_ball, player_info->num_times_won_ball);
+	printf("%d %d %d %d %d %d %d %d %d\n", player_info->prev_position[0], player_info->prev_position[1], player_info->current_position[0], player_info->current_position[1], 
+		player_info->reached_ball_this_round, player_info->win_ball_this_round, player_info->num_meters_run, player_info->num_times_reached_ball, player_info->num_times_won_ball);
 }
 
 
@@ -85,6 +94,8 @@ void init_player(struct PlayerInfo * player_info) {
 	player_info->num_meters_run = 0;
 	player_info->num_times_reached_ball = 0;
 	player_info->num_times_won_ball = 0;
+	player_info->win_ball_this_round = 0;
+	player_info->reached_ball_this_round = 0;
 }
 
 
@@ -134,6 +145,7 @@ void load_player_info_from_buffer(int * buffer, struct PlayerInfo * player_info)
 	player_info->num_meters_run = buffer[5];
 	player_info->num_times_reached_ball = buffer[6];
 	player_info->num_times_won_ball = buffer[7];
+	player_info->win_ball_this_round = buffer[8];
 }
 
 
@@ -146,12 +158,12 @@ void load_player_info_into_buffer(int * buffer, struct PlayerInfo * player_info)
 	buffer[5] = player_info->num_meters_run;
 	buffer[6] = player_info->num_times_reached_ball;
 	buffer[7] = player_info->num_times_won_ball;
+	buffer[8] = player_info->win_ball_this_round;
 }
 
 
 void send_info_to_field_process(int * buffer, int size, int tag) {
 	MPI_Send(buffer, size, MPI_INT, FIELD_PROCESS_RANK, tag, MPI_COMM_WORLD);
-
 }
 
 
@@ -173,10 +185,10 @@ bool is_same_position(int * pos1, int * pos2) {
 
 void run_to_ball(int * src, int * dest) {
 		//the directed distance
-	int hor_dist = dest[0] - src[0];
-	int ver_dist = dest[1] - src[1];
+	int hor_dist = abs(dest[0] - src[0]);
+	int ver_dist = abs(dest[1] - src[1]);
 
-	if (abs(hor_dist) + abs(ver_dist) <= MAX_RUN) {
+	if (hor_dist + ver_dist <= MAX_RUN) {
 		src[0] = dest[0];
 		src[1] = dest[1];
 		return;
@@ -188,21 +200,27 @@ void run_to_ball(int * src, int * dest) {
 
 
 	// printf("%d %d %d %d %d \n", src[0], src[1], dest[0], dest[1], diag_move);
-	
+	int low = max(0, MAX_RUN - ver_dist);
+	int high = min(hor_dist, MAX_RUN); 
+
+	int hor_move = low + rand()% (high - low + 1);
+	int ver_move = MAX_RUN - hor_move;
+
 	if (src[0] > dest[0]) {
-		src[0] = src[0] - diag_move;
+		src[0] = src[0] - hor_move;
 	} else {
-		src[0] = src[0] + diag_move;
+		src[0] = src[0] + hor_move;
 	}
 
 
 	if (src[1] > dest[1]) {
-		src[1] = src[1] - diag_move;
+		src[1] = src[1] - ver_move;
 	} else {
-		src[1] = src[1] + diag_move;
+		src[1] = src[1] + ver_move;
 	}
 
 	//use left over moves to slide along 1 of the 2 directions
+	/*
 	int move_left = MAX_RUN - 2 * diag_move;
 
 	if (src[0] > dest[0]) {
@@ -217,6 +235,7 @@ void run_to_ball(int * src, int * dest) {
 	} else if (src[1] < dest[1]) {
 		src[1] = src[1] + move_left;
 	}
+	*/
 }
 
 
@@ -237,7 +256,9 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 	send_info_to_field_process(player_info->current_position, 2, tag);
 
 	player_info->num_meters_run += get_distance(player_info->prev_position, player_info->current_position);
-	
+	player_info->reached_ball_this_round = 0;
+	player_info->win_ball_this_round = 0;
+
 	if (is_same_position(player_info->current_position, ball_position)) {
 		player_info->reached_ball_this_round = 1;
 		player_info->num_times_reached_ball ++;
@@ -246,12 +267,13 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 		receive_info_from_field_process(&is_winner, 1, tag);
 
 		if (is_winner) {
+			player_info->win_ball_this_round = 1;
 			player_info->num_times_won_ball ++;
-			init_random_position(ball_position);
-			send_info_to_field_process(ball_position, 2, tag);
+			int new_ball_position[2];
+			init_random_position(new_ball_position);
+			send_info_to_field_process(new_ball_position, 2, 0);
+			// printf("New random position %d %d \n", new_ball_position[0], new_ball_position[1]);
 		} 
-	} else {
-		player_info->reached_ball_this_round = 0;
 	}
 
 	send_player_info_to_field_process(buffer, player_info, tag);
@@ -287,11 +309,12 @@ void run_field_round(int round, int rank, struct PlayerInfo * players_info, int 
 	int i;
 	int tag = 0;
 	
-	send_ball_position_to_players(ball_position, tag, requests);
-
-	//print rounds info
 	printf("%d\n", round);
-	printf("%d %d\n", ball_position[0], ball_position[1]);
+	printf("%d %d\n", ball_position[0], ball_position[1]);	
+	
+	send_ball_position_to_players(ball_position, tag, requests);
+	//print rounds info
+
 
 	//receive player positions
 	for (i=0; i<NUM_PLAYERS; i++) {
@@ -330,11 +353,13 @@ void run_field_round(int round, int rank, struct PlayerInfo * players_info, int 
 		MPI_Waitall(num_players_reached_ball, requests, MPI_STATUSES_IGNORE);
 
 		MPI_Recv(ball_position, 2, MPI_INT, winner, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		// printf("New random position %d %d \n", ball_position[0], ball_position[1]);	
 	}	
 
 	receive_info_from_players(requests, buffers, players_info, tag);
 
 	for (i=0; i<NUM_PLAYERS; i++) {
+		printf("%d ", i);
 		print_player_info(&players_info[i]);
 	}
 }
@@ -390,12 +415,12 @@ int main(int argc,char *argv[])
 		buffers[i] = (int *) malloc(BUFFER_SIZE * sizeof (int));
 	}
 	
-
 	init_process(rank, players_info, buffers, ball_position, requests);
 
 	int round = 1;
 	while (round <= NUM_ROUNDS) {
 		run_process_round(round, rank, players_info, buffers, ball_position, requests);
+		MPI_Barrier(MPI_COMM_WORLD);
 		round ++;
 	}
 
