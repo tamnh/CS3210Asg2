@@ -367,8 +367,6 @@ void join_challenge_phase(int rank, int field_id, struct PlayerInfo * player_inf
 
 	MPI_Bcast(winner, 1, MPI_INT, field_id, *subfield_comm);
 
-	MPI_Barrier(*subfield_comm);
-
 	if ((*winner) == rank) {
 		player_info->win_ball_this_round = 1;
 	}
@@ -407,9 +405,7 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 		join_challenge_phase(rank, field_id, player_info, buffer, subfield_comm, ball_position, winner);
 	}
 
-	MPI_Barrier(*subfield_comm);
 	MPI_Comm_free(subfield_comm);
-	
 	// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
 	send_player_info_to_field_process(buffer, player_info, report_comm);
 }
@@ -442,8 +438,6 @@ void handle_field_challenges(int rank, int ** buffers, MPI_Comm * subfield_comm,
 	}
 	
 	MPI_Bcast(winner, 1, MPI_INT, rank, *subfield_comm);
-	MPI_Barrier(*subfield_comm);
-
 
 	free(dummy_buffer);
 }
