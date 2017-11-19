@@ -178,17 +178,22 @@ void reset_player_position(struct PlayerInfo * player_info) {
 }
 
 
-void init_player_process(int rank, struct PlayerInfo * player_info, MPI_Comm * report_comm) {
+void init_player_process(int rank, struct PlayerInfo * player_info, MPI_Comm * all_subfields_comm, MPI_Comm * report_comm) {
 	int tag = 0;
 	init_player(player_info, rank);
+
+	MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, rank, all_subfields_comm);
+
 	MPI_Comm_split(MPI_COMM_WORLD, REPORT_COMM_KEY, rank, report_comm);
 	// print_player_info(player_info);
 }
 
 
-void init_field_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
+void init_field_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Comm * all_subfields_comm, MPI_Comm * report_comm) {
 	int i;
 	int tag = 0;
+
+	MPI_Comm_split(MPI_COMM_WORLD, 0, rank, all_subfields_comm);
 
 	if (rank == 0) {
 		init_random_position(ball_position);
@@ -201,9 +206,9 @@ void init_field_process(int rank, struct PlayerInfo * player_info, int ** buffer
 
 void init_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Comm * all_subfields_comm, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
 	if (is_field_process(rank)) {
-		init_field_process(rank, player_info, buffers, ball_position, subfield_comm, report_comm);
+		init_field_process(rank, player_info, buffers, ball_position, all_subfields_comm, report_comm);
 	} else {
-		init_player_process(rank, &player_info[0], report_comm);
+		init_player_process(rank, &player_info[0], all_subfields_comm, report_comm);
 	}
 }
 
@@ -362,12 +367,12 @@ void join_challenge_phase(int rank, int field_id, struct PlayerInfo * player_inf
 
 	MPI_Bcast(winner, 1, MPI_INT, field_id, *subfield_comm);
 
+	MPI_Barrier(*subfield_comm);
+
 	if ((*winner) == rank) {
 		player_info->win_ball_this_round = 1;
 	}
 }
-
-
 
 
 void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, int * ball_position, MPI_Comm * subfield_comm, MPI_Comm * report_comm, int * reset, int * winner) {
@@ -402,7 +407,9 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 		join_challenge_phase(rank, field_id, player_info, buffer, subfield_comm, ball_position, winner);
 	}
 
+	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Comm_free(subfield_comm);
+	
 	// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
 	send_player_info_to_field_process(buffer, player_info, report_comm);
 }
@@ -427,11 +434,17 @@ void handle_field_challenges(int rank, int ** buffers, MPI_Comm * subfield_comm,
 		for (i=1; i<no_participants; i++) {
 			if (buffers[i][1] > max_challenge) {
 				max_challenge = buffers[i][1];
+				*winner = buffers[i][0];
+				ball_position[0] = buffers[i][0];
+				ball_position[1] = buffers[i][0];
 			}
 		}
 	}
 	
 	MPI_Bcast(winner, 1, MPI_INT, rank, *subfield_comm);
+	MPI_Barrier(*subfield_comm);
+
+
 	free(dummy_buffer);
 }
 
@@ -451,9 +464,10 @@ void receive_players_info(int ** buffers, struct PlayerInfo * players_info, MPI_
 }
 
 
-void run_field_round(int round, int rank, struct PlayerInfo * players_info, int ** buffers, int * ball_position, 
+void run_field_round(int round, int rank, struct PlayerInfo * players_info, int ** buffers, int * ball_position, MPI_Comm * all_subfields_comm,
 	MPI_Comm * subfield_comm, MPI_Comm * report_comm, int * reset, int * winner, int * score) {
 	int i;
+	int field_id = get_field_index(ball_position);
 
 	if (rank == 0) {
 		//we don't store the position of the ball
@@ -467,26 +481,32 @@ void run_field_round(int round, int rank, struct PlayerInfo * players_info, int 
 	// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
 	MPI_Comm_split(MPI_COMM_WORLD, rank, rank, subfield_comm);
 
-	if (get_field_index(ball_position) == rank) {
+	if (field_id == rank) {
 		handle_field_challenges(rank, buffers, subfield_comm, winner, ball_position);
 	}
 
 	MPI_Comm_free(subfield_comm);
 
+
+	MPI_Bcast(ball_position, 2, MPI_INT, field_id, *all_subfields_comm);
+	MPI_Barrier(*all_subfields_comm);
+
 	if (rank == 0) {
 		receive_players_info(buffers, players_info, report_comm);
 		for (i=1; i<=2*TEAM_SIZES; i++) {
+			if (i==1) printf("TEAM A: \n");
+			if (i==TEAM_SIZES+1) printf("TEAM B: \n");
 			print_player_info(&players_info[i]);
 		}
 	}
 }
 
 
-void run_process_round(int round, int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, 
+void run_process_round(int round, int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Comm * all_subfields_comm,
 	MPI_Comm * subfield_comm, MPI_Comm * report_comm, int * reset, int * winner, int * score) {
 	if (is_field_process(rank)) {
 		//printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
-		run_field_round(round, rank, player_info, buffers, ball_position, subfield_comm, report_comm, reset, winner, score);
+		run_field_round(round, rank, player_info, buffers, ball_position, all_subfields_comm, subfield_comm, report_comm, reset, winner, score);
 	} else {
 		// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
 		run_player_round(rank, &player_info[0], buffers[0], ball_position, subfield_comm, report_comm, reset, winner);
@@ -551,11 +571,11 @@ int main(int argc,char *argv[])
 
 	int round = 1;
 	
-	while (round <= 2) {
+	while (round <= 2 * NUM_ROUNDS) {
 		if (round == NUM_ROUNDS) {
 			is_first_half = false;
 		}
-		run_process_round(round, rank, players_info, buffers, ball_position, &subfield_comm, &report_comm, &reset, &winner, score);
+		run_process_round(round, rank, players_info, buffers, ball_position, &all_subfields_comm, &subfield_comm, &report_comm, &reset, &winner, score);
 		round ++;
 	}
 
