@@ -15,8 +15,8 @@ const int SUBFIELD_SIZES[2] = {32, 32};
 const int SUBFIELD_COUNTS[2] = {4, 3};
 
 const int MAX_RUN = 10;
-const int NUM_FIELD_PROCESS = 2;
-const int TEAM_SIZES = 1;
+const int NUM_FIELD_PROCESS = 12;
+const int TEAM_SIZES = 11;
 const int NUM_ROUNDS = 2700;
 const int BUFFER_SIZE = 10;
 const int NUM_PROCESSES = NUM_FIELD_PROCESS + 2 * TEAM_SIZES;
@@ -161,6 +161,11 @@ void init_player(struct PlayerInfo * player_info, int rank) {
 }
 
 
+void reset_player_position(struct PlayerInfo * player_info) {
+	init_random_position(player_info->current_position);
+}
+
+
 void init_player_process(int rank, struct PlayerInfo * player_info, MPI_Comm * report_comm) {
 	int tag = 0;
 	init_player(player_info, rank);
@@ -169,9 +174,11 @@ void init_player_process(int rank, struct PlayerInfo * player_info, MPI_Comm * r
 }
 
 
-void init_field_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Request * requests, MPI_Comm * report_comm) {
+void init_field_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
 	int i;
 	int tag = 0;
+
+	MPI_Comm_split(MPI_COMM_WORLD, rank, rank, subfield_comm);
 
 	if (rank == 0) {
 		init_random_position(ball_position);
@@ -182,9 +189,9 @@ void init_field_process(int rank, struct PlayerInfo * player_info, int ** buffer
 }
 
 
-void init_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Request * requests, MPI_Comm * all_subfields_comm, MPI_Comm * subfields_comm, MPI_Comm * report_comm) {
+void init_process(int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Comm * all_subfields_comm, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
 	if (is_field_process(rank)) {
-		init_field_process(rank, player_info, buffers, ball_position, requests, report_comm);
+		init_field_process(rank, player_info, buffers, ball_position, subfield_comm, report_comm);
 	} else {
 		init_player_process(rank, &player_info[0], report_comm);
 	}
@@ -298,13 +305,40 @@ void send_player_info_to_field_process(int * buffer, struct PlayerInfo * player_
 }
 
 
-void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, int * ball_position, MPI_Comm * report_comm) {
+void challenge_ball(int rank, struct PlayerInfo * player_info, int * buffer, MPI_Comm * subfield_comm, int * ball_position) {
+	int field_id = get_field_index(player_info->current_position);
+
+	MPI_Comm_split(MPI_COMM_WORLD, field_id, rank, subfield_comm);
+
+	MPI_Barrier(* subfield_comm);
+
+	MPI_Comm_free(subfield_comm);
+}
+
+
+void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, int * ball_position, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
 	//sync ball position 
 	MPI_Bcast(ball_position, 2, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Barrier(MPI_COMM_WORLD);
 
+	
+	//move all player to the ball
+	player_info->prev_position[0] = player_info->current_position[0];
+	player_info->prev_position[1] = player_info->current_position[1];
+	run_to_ball(player_info->current_position, ball_position, player_info->speed_skill);
+
+
 	// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
 	send_player_info_to_field_process(buffer, player_info, report_comm);
+}
+
+
+void handle_field_challenges(int rank, int ** buffers, MPI_Comm * subfield_comm) {
+	
+
+	MPI_Barrier(* subfield_comm);
+
+	MPI_Comm_free(subfield_comm);
 }
 
 
@@ -320,7 +354,8 @@ void receive_players_info(int ** buffers, struct PlayerInfo * players_info, MPI_
 	}
 }
 
-void run_field_round(int round, int rank, struct PlayerInfo * players_info, int ** buffers, int * ball_position, MPI_Request * requests, MPI_Comm * report_comm) {
+
+void run_field_round(int round, int rank, struct PlayerInfo * players_info, int ** buffers, int * ball_position, MPI_Request * requests, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
 	int i;
 
 	if (rank == 0) {
@@ -333,6 +368,10 @@ void run_field_round(int round, int rank, struct PlayerInfo * players_info, int 
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
+	if (get_field_index(ball_position) == rank) {
+		handle_field_challenges(rank, buffers, subfield_comm);
+	}
+
 	if (rank == 0) {
 		receive_players_info(buffers, players_info, report_comm);
 		for (i=1; i<=2*TEAM_SIZES; i++) {
@@ -342,13 +381,13 @@ void run_field_round(int round, int rank, struct PlayerInfo * players_info, int 
 }
 
 
-void run_process_round(int round, int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Request * requests, MPI_Comm * report_comm) {
+void run_process_round(int round, int rank, struct PlayerInfo * player_info, int ** buffers, int * ball_position, MPI_Request * requests, MPI_Comm * subfield_comm, MPI_Comm * report_comm) {
 	if (is_field_process(rank)) {
 		//printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
-		run_field_round(round, rank, player_info, buffers, ball_position, requests, report_comm);
+		run_field_round(round, rank, player_info, buffers, ball_position, requests, subfield_comm, report_comm);
 	} else {
 		// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
-		run_player_round(rank, &player_info[0], buffers[0], ball_position, report_comm);
+		run_player_round(rank, &player_info[0], buffers[0], ball_position, subfield_comm, report_comm);
 	}
 }
 
@@ -401,9 +440,11 @@ int main(int argc,char *argv[])
 		buffers[i] = (int *) & flat_buffer[i * BUFFER_SIZE];
 	}
 	
-	init_process(rank, players_info, buffers, ball_position, requests, &all_subfields_comm, &subfield_comm, &report_comm);
+	init_process(rank, players_info, buffers, ball_position, &all_subfields_comm, &subfield_comm, &report_comm);
 	
 	MPI_Barrier(MPI_COMM_WORLD);
+
+	printf("Begin match %d \n", rank); 
 
 	int round = 1;
 	
@@ -411,7 +452,7 @@ int main(int argc,char *argv[])
 		if (round == NUM_ROUNDS) {
 			is_first_half = false;
 		}
-		run_process_round(round, rank, players_info, buffers, ball_position, requests, &report_comm);
+		run_process_round(round, rank, players_info, buffers, ball_position, requests, &subfield_comm, &report_comm);
 		round ++;
 	}
 
