@@ -19,12 +19,12 @@ const int NUM_FIELD_PROCESS = 12;
 const int TEAM_SIZES = 11;
 const int NUM_ROUNDS = 2700;
 const int BUFFER_SIZE = 10;
-const int NUM_PROCESSES = NUM_FIELD_PROCESS + 2 * TEAM_SIZES;
+const int NUM_PROCESSES = 34;
 
-const int TEAM_A_FIRST_ID = NUM_FIELD_PROCESS;
-const int TEAM_A_LAST_ID = TEAM_A_FIRST_ID + TEAM_SIZES - 1;
-const int TEAM_B_FIRST_ID = NUM_FIELD_PROCESS + TEAM_SIZES;
-const int TEAM_B_LAST_ID = TEAM_B_FIRST_ID + TEAM_SIZES - 1;
+const int TEAM_A_FIRST_ID = 12;
+const int TEAM_A_LAST_ID = 22;
+const int TEAM_B_FIRST_ID = 23;
+const int TEAM_B_LAST_ID = 33;
 
 //unique key to create communication channels
 const int REPORT_COMM_KEY = 100;
@@ -394,9 +394,8 @@ void run_process_round(int round, int rank, struct PlayerInfo * player_info, int
 
 int main(int argc,char *argv[])
 {
-	int numtasks, rank, dest, source, rc, count, tag=1;
+	int numtasks, rank;
 	int i;
-	MPI_Status Stat;
 
 	struct PlayerInfo * players_info;
 
