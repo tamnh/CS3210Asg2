@@ -330,6 +330,7 @@ void perform_kick(int rank, struct PlayerInfo * player_info, int * ball_position
 	target_goal[1] = max(GOAL_RANGE[0], target_goal[1]);
 
 	move_to_point(ball_position, target_goal, 2 * player_info->kick_power);
+	printf("%d %d %d %d %d\n", rank ball_position[0], ball_position[1], target_goal[0], target_goal[1]);
 }
 
 
