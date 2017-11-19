@@ -418,6 +418,7 @@ int main(int argc,char *argv[])
 	init_process(rank, players_info, buffers, ball_position, requests);
 
 	int round = 1;
+	
 	while (round <= NUM_ROUNDS) {
 		run_process_round(round, rank, players_info, buffers, ball_position, requests);
 		MPI_Barrier(MPI_COMM_WORLD);
