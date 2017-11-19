@@ -407,7 +407,7 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 		join_challenge_phase(rank, field_id, player_info, buffer, subfield_comm, ball_position, winner);
 	}
 
-	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Barrier(*subfield_comm);
 	MPI_Comm_free(subfield_comm);
 	
 	// printf("%d %d %d\n", rank, ball_position[0], ball_position[1]);
