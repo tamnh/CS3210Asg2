@@ -178,7 +178,7 @@ void init_player(struct PlayerInfo * player_info, int rank) {
 	*/
 
 	assign_random_attributes(player_info);
-	printf("%d %d %d %d\n", rank, player_info->dribbling_skill, player_info->speed_skill, player_info->kick_power);
+	//printf("%d %d %d %d\n", rank, player_info->dribbling_skill, player_info->speed_skill, player_info->kick_power);
 
 	//get player id 
 	if (is_team_A_player(rank)) {
@@ -430,17 +430,38 @@ void handle_field_challenges(int rank, int ** buffers, MPI_Comm * subfield_comm,
 	//get the winner;
 	int no_participants;
 	int max_challenge = 0;
+	int max_challenge_count = 0;
+	int winner_id, cnt;
 
 	MPI_Comm_size(*subfield_comm, &no_participants);
 
 	if (no_participants > 1) {
 		//loop though
 		for (i=1; i<no_participants; i++) {
-			if (buffers[i][1] > max_challenge) {
-				max_challenge = buffers[i][1];
-				*winner = buffers[i][0];
-				ball_position[0] = buffers[i][2];
-				ball_position[1] = buffers[i][3];
+			if (buffers[i][1] >= max_challenge) {
+				if (buffers[i][1] == max_challenge) {
+					max_challenge_count ++;
+				} else {
+					max_challenge = buffers[i][1];
+					max_challenge_count = 1;
+				}
+			}
+		}
+
+		if (max_challenge > 0) {
+			winner_id = rand() % max_challenge_count;
+			cnt=0;
+			for (i=1; i<no_participants; i++) {
+				if (buffers[i][1] == max_challenge) {
+					if (winner_id == cnt) {
+						//setting winner and choose the new ball position
+						* winner = buffers[i][0];
+						ball_position[0] = buffers[i][2];
+						ball_position[1] = buffers[i][3];
+					}
+
+					cnt++;
+				} 
 			}
 		}
 	}
@@ -610,7 +631,7 @@ int main(int argc,char *argv[])
 			reset = 1;
 		}
 
-		// run_process_round(round, rank, players_info, buffers, ball_position, &all_subfields_comm, &subfield_comm, &report_comm, &reset, &winner, score);
+		run_process_round(round, rank, players_info, buffers, ball_position, &all_subfields_comm, &subfield_comm, &report_comm, &reset, &winner, score);
 		round ++;
 	}
 
