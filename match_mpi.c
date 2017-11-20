@@ -138,12 +138,8 @@ bool is_field_process(int rank) {
 
 
 void init_random_position(int * position) {
-	position[0] = rand() % (FIELD_SIZES[0] / 2) ;
+	position[0] = rand() % FIELD_SIZES[0] ;
 	position[1] = rand() % FIELD_SIZES[1];
-
-	if (!is_first_half) {
-		position[0] = FIELD_SIZES[0] - 1 - position[0];
-	}
 }
 
 
