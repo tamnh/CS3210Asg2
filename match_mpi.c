@@ -18,7 +18,7 @@ const int MAX_RUN = 10;
 const int NUM_FIELD_PROCESS = 12;
 const int TEAM_SIZES = 11;
 const int NUM_ROUNDS = 2700;
-const int BUFFER_SIZE = 7;
+const int BUFFER_SIZE = 8;
 const int NUM_PROCESSES = 34;
 
 const int TEAM_A_FIRST_ID = 12;
