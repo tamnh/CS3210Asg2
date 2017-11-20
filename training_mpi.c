@@ -8,9 +8,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-const int NUM_PLAYERS = 3;
-const int NUM_PROCESSES = 4;
-const int FIELD_PROCESS_RANK = 3;
+const int NUM_PLAYERS = 11;
+const int NUM_PROCESSES = 12;
+const int FIELD_PROCESS_RANK = 11;
 const int FIELD_SIZES[2] = {128 , 64};
 const int MAX_RUN = 10;
 const int NUM_ROUNDS = 900;
