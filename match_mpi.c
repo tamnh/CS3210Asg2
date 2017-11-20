@@ -406,7 +406,7 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 	if (rand() % 2) {
 		move_to_point(player_info->current_position, ball_position, min(player_info->speed_skill, MAX_RUN));
 	}
-	
+
 	//update distance run
 	//player_info->num_meters_run += get_distance(player_info->prev_position, player_info->current_position);
 
@@ -624,8 +624,6 @@ int main(int argc,char *argv[])
 	init_process(rank, players_info, buffers, ball_position, &all_subfields_comm, &subfield_comm, &report_comm);
 	
 	MPI_Barrier(MPI_COMM_WORLD);
-
-	printf("Begin match %d \n", rank); 
 
 	int round = 1;
 	
