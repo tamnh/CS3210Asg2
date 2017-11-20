@@ -237,6 +237,7 @@ void load_player_info_from_buffer(int * buffer, struct PlayerInfo * player_info)
 	player_info->reached_ball_this_round = buffer[4];
 	player_info->win_ball_this_round = buffer[5];
 	player_info->ball_challenge = buffer[6];
+	player_info->id = buffer[7];
 }
 
 
@@ -248,6 +249,7 @@ void load_player_info_into_buffer(int * buffer, struct PlayerInfo * player_info)
 	buffer[4] = player_info->reached_ball_this_round;
 	buffer[5] = player_info->win_ball_this_round;
 	buffer[6] = player_info->ball_challenge;
+	buffer[7] = player_info->id;
 }
 
 
