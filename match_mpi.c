@@ -535,6 +535,7 @@ void run_field_round(int round, int rank, struct PlayerInfo * players_info, int 
 	MPI_Bcast(ball_position, 2, MPI_INT, field_id, *all_subfields_comm);
 	MPI_Barrier(*all_subfields_comm);
 
+	//to be factored
 	if (rank == 0) {
 
 		receive_players_info(buffers, players_info, report_comm);
