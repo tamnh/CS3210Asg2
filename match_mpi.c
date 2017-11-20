@@ -402,8 +402,11 @@ void run_player_round(int rank, struct PlayerInfo * player_info, int * buffer, i
 	//move all player to the ball
 	player_info->prev_position[0] = player_info->current_position[0];
 	player_info->prev_position[1] = player_info->current_position[1];
-	move_to_point(player_info->current_position, ball_position, min(player_info->speed_skill, MAX_RUN));
 
+	if (rand() % 2) {
+		move_to_point(player_info->current_position, ball_position, min(player_info->speed_skill, MAX_RUN));
+	}
+	
 	//update distance run
 	//player_info->num_meters_run += get_distance(player_info->prev_position, player_info->current_position);
 
